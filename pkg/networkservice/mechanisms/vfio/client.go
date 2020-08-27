@@ -20,9 +20,11 @@ import (
 	"context"
 	"os"
 	"path"
+	"strconv"
 
 	"github.com/golang/protobuf/ptypes/empty"
 	"github.com/networkservicemesh/api/pkg/api/networkservice"
+	"github.com/networkservicemesh/api/pkg/api/networkservice/mechanisms/vfio"
 	"github.com/networkservicemesh/sdk/pkg/networkservice/core/next"
 	"github.com/networkservicemesh/sdk/pkg/tools/log"
 	"golang.org/x/sys/unix"
@@ -50,7 +52,11 @@ func NewClient(vfioDir, cgroupDir string) networkservice.NetworkServiceClient {
 func (c *vfioClient) Request(ctx context.Context, request *networkservice.NetworkServiceRequest, opts ...grpc.CallOption) (*networkservice.Connection, error) {
 	logEntry := log.Entry(ctx).WithField("vfioClient", "Request")
 
-	request.Connection.Context.ExtraContext[clientCgroupDirKey] = c.cgroupDir
+	mech := vfio.ToMechanism(request.GetConnection().GetMechanism())
+	if mech == nil {
+		return next.Client(ctx).Request(ctx, request, opts...)
+	}
+	mech.SetCgroupDir(c.cgroupDir)
 
 	conn, err := next.Client(ctx).Request(ctx, request, opts...)
 	if err != nil {
@@ -65,17 +71,17 @@ func (c *vfioClient) Request(ctx context.Context, request *networkservice.Networ
 	if err := unix.Mknod(
 		path.Join(c.vfioDir, vfioDevice),
 		unix.S_IFCHR|mknodPerm,
-		int(unix.Mkdev(atou(conn.Mechanism.Parameters[vfioMajorKey]), atou(conn.Mechanism.Parameters[vfioMinorKey]))),
+		int(unix.Mkdev(mech.GetVfioMajor(), mech.GetVfioMinor())),
 	); err != nil && !os.IsExist(err) {
 		logEntry.Errorf("failed to mknod device: %v", vfioDevice)
 		return nil, err
 	}
 
-	igid := conn.Mechanism.Parameters[IommuGroupKey]
+	igid := strconv.FormatUint(uint64(conn.GetContext().GetSriovContext().GetIommuGroup()), 10)
 	if err := unix.Mknod(
 		path.Join(c.vfioDir, igid),
 		unix.S_IFCHR|mknodPerm,
-		int(unix.Mkdev(atou(conn.Mechanism.Parameters[deviceMajorKey]), atou(conn.Mechanism.Parameters[deviceMinorKey]))),
+		int(unix.Mkdev(mech.GetDeviceMajor(), mech.GetDeviceMinor())),
 	); err != nil && !os.IsExist(err) {
 		logEntry.Errorf("failed to mknod device: %v", vfioDevice)
 		return nil, err

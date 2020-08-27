@@ -23,11 +23,17 @@ import (
 	"testing"
 
 	"github.com/networkservicemesh/api/pkg/api/networkservice"
+	"github.com/networkservicemesh/api/pkg/api/networkservice/mechanisms/cls"
+	vfioapi "github.com/networkservicemesh/api/pkg/api/networkservice/mechanisms/vfio"
 	"github.com/networkservicemesh/sdk/pkg/networkservice/core/chain"
 	"github.com/stretchr/testify/assert"
 	"golang.org/x/sys/unix"
 
 	"github.com/networkservicemesh/sdk-sriov/pkg/networkservice/mechanisms/vfio"
+)
+
+const (
+	cgroupDir = "cgroup-dir"
 )
 
 func TestVfioClient_Request(t *testing.T) {
@@ -46,22 +52,25 @@ func TestVfioClient_Request(t *testing.T) {
 	conn, err := client.Request(ctx, &networkservice.NetworkServiceRequest{
 		Connection: &networkservice.Connection{
 			Mechanism: &networkservice.Mechanism{
+				Type: vfioapi.MECHANISM,
+				Cls:  cls.REMOTE,
 				Parameters: map[string]string{
-					vfio.IommuGroupKey: iommuGroup,
-					vfioMajorKey:       "1",
-					vfioMinorKey:       "2",
-					deviceMajorKey:     "3",
-					deviceMinorKey:     "4",
+					vfioapi.VfioMajorKey:   "1",
+					vfioapi.VfioMinorKey:   "2",
+					vfioapi.DeviceMajorKey: "3",
+					vfioapi.DeviceMinorKey: "4",
 				},
 			},
 			Context: &networkservice.ConnectionContext{
-				ExtraContext: map[string]string{},
+				SriovContext: &networkservice.SRIOVContext{
+					IommuGroup: iommuGroup,
+				},
 			},
 		},
 	})
 	assert.Nil(t, err)
 
-	assert.Equal(t, cgroupDir, conn.Context.ExtraContext[clientCgroupDirKey])
+	assert.Equal(t, cgroupDir, conn.Mechanism.Parameters[vfioapi.CgroupDirKey])
 
 	info := new(unix.Stat_t)
 
@@ -70,7 +79,7 @@ func TestVfioClient_Request(t *testing.T) {
 	assert.Equal(t, uint32(1), unix.Major(info.Rdev))
 	assert.Equal(t, uint32(2), unix.Minor(info.Rdev))
 
-	err = unix.Stat(path.Join(tmpDir, iommuGroup), info)
+	err = unix.Stat(path.Join(tmpDir, iommuGroupString), info)
 	assert.Nil(t, err)
 	assert.Equal(t, uint32(3), unix.Major(info.Rdev))
 	assert.Equal(t, uint32(4), unix.Minor(info.Rdev))

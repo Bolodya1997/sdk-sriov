@@ -37,26 +37,19 @@ import (
 )
 
 const (
-	clientCgroupDirKey = "clientCgroupDir"
 	deviceAllowFile    = "devices.allow"
 	deviceDenyFile     = "devices.deny"
 	deviceStringFormat = "c %d:%d rwm"
-	vfioMajorKey       = "vfioMajor"
-	vfioMinorKey       = "vfioMinor"
-	deviceMajorKey     = "deviceMajor"
-	deviceMinorKey     = "deviceMinor"
 )
 
 func testConnection() *networkservice.Connection {
 	return &networkservice.Connection{
 		Mechanism: &networkservice.Mechanism{
-			Cls:  cls.LOCAL,
+			Cls:  cls.REMOTE,
 			Type: vfioapi.MECHANISM,
 		},
 		Context: &networkservice.ConnectionContext{
-			ExtraContext: map[string]string{
-				clientCgroupDirKey: "",
-			},
+			SriovContext: &networkservice.SRIOVContext{},
 		},
 	}
 }
@@ -105,10 +98,11 @@ func TestVfioServer_Close(t *testing.T) {
 
 	conn := testConnection()
 	conn.Mechanism.Parameters = map[string]string{
-		vfioMajorKey:   "1",
-		vfioMinorKey:   "2",
-		deviceMajorKey: "3",
-		deviceMinorKey: "4",
+		vfioapi.CgroupDirKey:   "",
+		vfioapi.VfioMajorKey:   "1",
+		vfioapi.VfioMinorKey:   "2",
+		vfioapi.DeviceMajorKey: "3",
+		vfioapi.DeviceMinorKey: "4",
 	}
 
 	_, err := server.Close(ctx, conn)

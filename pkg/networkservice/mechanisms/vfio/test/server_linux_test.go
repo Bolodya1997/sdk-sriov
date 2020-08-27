@@ -48,13 +48,11 @@ const (
 func testConnection() *networkservice.Connection {
 	return &networkservice.Connection{
 		Mechanism: &networkservice.Mechanism{
-			Cls:  cls.LOCAL,
+			Cls:  cls.REMOTE,
 			Type: vfioapi.MECHANISM,
 		},
 		Context: &networkservice.ConnectionContext{
-			ExtraContext: map[string]string{
-				clientCgroupDirKey: "",
-			},
+			SriovContext: &networkservice.SRIOVContext{},
 		},
 	}
 }
@@ -103,7 +101,7 @@ func TestVfioServer_Request(t *testing.T) {
 
 	err := unix.Mknod(path.Join(tmpDir, vfioDevice), unix.S_IFCHR|0666, int(unix.Mkdev(1, 2)))
 	assert.Nil(t, err)
-	err = unix.Mknod(path.Join(tmpDir, iommuGroup), unix.S_IFCHR|0666, int(unix.Mkdev(3, 4)))
+	err = unix.Mknod(path.Join(tmpDir, iommuGroupString), unix.S_IFCHR|0666, int(unix.Mkdev(3, 4)))
 	assert.Nil(t, err)
 
 	conn, err := server.Request(ctx, &networkservice.NetworkServiceRequest{
@@ -111,10 +109,10 @@ func TestVfioServer_Request(t *testing.T) {
 	})
 	assert.Nil(t, err)
 
-	assert.Equal(t, "1", conn.Mechanism.Parameters[vfioMajorKey])
-	assert.Equal(t, "2", conn.Mechanism.Parameters[vfioMinorKey])
-	assert.Equal(t, "3", conn.Mechanism.Parameters[deviceMajorKey])
-	assert.Equal(t, "4", conn.Mechanism.Parameters[deviceMinorKey])
+	assert.Equal(t, "1", conn.Mechanism.Parameters[vfioapi.VfioMajorKey])
+	assert.Equal(t, "2", conn.Mechanism.Parameters[vfioapi.VfioMinorKey])
+	assert.Equal(t, "3", conn.Mechanism.Parameters[vfioapi.DeviceMajorKey])
+	assert.Equal(t, "4", conn.Mechanism.Parameters[vfioapi.DeviceMinorKey])
 
 	assert.Eventually(t, func() bool {
 		allowedDevices.Lock()
@@ -141,11 +139,11 @@ func TestVfioServer_Close(t *testing.T) {
 
 	conn := testConnection()
 	conn.Mechanism.Parameters = map[string]string{
-		vfio.IommuGroupKey: iommuGroup,
-		vfioMajorKey:       "1",
-		vfioMinorKey:       "2",
-		deviceMajorKey:     "3",
-		deviceMinorKey:     "4",
+		vfioapi.CgroupDirKey:   "",
+		vfioapi.VfioMajorKey:   "1",
+		vfioapi.VfioMinorKey:   "2",
+		vfioapi.DeviceMajorKey: "3",
+		vfioapi.DeviceMinorKey: "4",
 	}
 
 	_, err := server.Close(ctx, conn)
@@ -159,13 +157,11 @@ func TestVfioServer_Close(t *testing.T) {
 }
 
 type endpointStub struct {
-	igid string
+	igid uint
 }
 
 func (e *endpointStub) Request(ctx context.Context, request *networkservice.NetworkServiceRequest) (*networkservice.Connection, error) {
-	request.Connection.Mechanism.Parameters = map[string]string{
-		vfio.IommuGroupKey: e.igid,
-	}
+	request.Connection.Context.SriovContext.IommuGroup = uint32(e.igid)
 	return next.Server(ctx).Request(ctx, request)
 }
 
