@@ -13,3 +13,5 @@ require (
 	golang.org/x/sys v0.0.0-20200610111108-226ff32320da
 	google.golang.org/grpc v1.29.1
 )
+
+replace github.com/networkservicemesh/api => github.com/Bolodya1997/api v0.0.0-20200826171946-a08d4ddad545
